@@ -6,9 +6,9 @@ import {
 import { isShopifyError } from 'lib/type-guards';
 import { ensureStartsWith } from 'lib/utils';
 import {
-  revalidateTag,
+  unstable_cacheLife as cacheLife,
   unstable_cacheTag as cacheTag,
-  unstable_cacheLife as cacheLife
+  revalidateTag
 } from 'next/cache';
 import { cookies, headers } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
@@ -61,12 +61,326 @@ import {
 const domain = process.env.SHOPIFY_STORE_DOMAIN
   ? ensureStartsWith(process.env.SHOPIFY_STORE_DOMAIN, 'https://')
   : '';
-const endpoint = `${domain}${SHOPIFY_GRAPHQL_API_ENDPOINT}`;
-const key = process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN!;
+const endpoint = domain ? `${domain}${SHOPIFY_GRAPHQL_API_ENDPOINT}` : '';
+const key = process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN || '';
 
 type ExtractVariables<T> = T extends { variables: object }
   ? T['variables']
   : never;
+
+// Mock data for when Shopify is not configured
+const mockProducts = [
+  {
+    id: 'mock-1',
+    handle: 'acme-circles-t-shirt',
+    availableForSale: true,
+    title: 'Acme Circles T-Shirt',
+    description: 'A comfortable t-shirt with the Acme logo.',
+    descriptionHtml: '<p>A comfortable t-shirt with the Acme logo.</p>',
+    options: [
+      {
+        id: 'option-1',
+        name: 'Size',
+        values: ['S', 'M', 'L', 'XL']
+      }
+    ],
+    priceRange: {
+      maxVariantPrice: {
+        amount: '20.00',
+        currencyCode: 'USD'
+      },
+      minVariantPrice: {
+        amount: '20.00',
+        currencyCode: 'USD'
+      }
+    },
+    variants: {
+      edges: [
+        {
+          node: {
+            id: 'variant-1',
+            title: 'S',
+            availableForSale: true,
+            selectedOptions: [{ name: 'Size', value: 'S' }],
+            price: { amount: '20.00', currencyCode: 'USD' }
+          }
+        }
+      ]
+    },
+    featuredImage: {
+      url: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=750&h=1000&fit=crop',
+      altText: 'Acme Circles T-Shirt',
+      width: 750,
+      height: 1000
+    },
+    images: {
+      edges: [
+        {
+          node: {
+            url: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=750&h=1000&fit=crop',
+            altText: 'Acme Circles T-Shirt',
+            width: 750,
+            height: 1000
+          }
+        }
+      ]
+    },
+    seo: {
+      description: 'A comfortable t-shirt with the Acme logo.',
+      title: 'Acme Circles T-Shirt'
+    },
+    tags: ['t-shirt', 'acme'],
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'mock-2',
+    handle: 'acme-drawstring-bag',
+    availableForSale: true,
+    title: 'Acme Drawstring Bag',
+    description: 'A practical drawstring bag for everyday use.',
+    descriptionHtml: '<p>A practical drawstring bag for everyday use.</p>',
+    options: [
+      {
+        id: 'option-2',
+        name: 'Color',
+        values: ['Black', 'White']
+      }
+    ],
+    priceRange: {
+      maxVariantPrice: {
+        amount: '12.00',
+        currencyCode: 'USD'
+      },
+      minVariantPrice: {
+        amount: '12.00',
+        currencyCode: 'USD'
+      }
+    },
+    variants: {
+      edges: [
+        {
+          node: {
+            id: 'variant-2',
+            title: 'Black',
+            availableForSale: true,
+            selectedOptions: [{ name: 'Color', value: 'Black' }],
+            price: { amount: '12.00', currencyCode: 'USD' }
+          }
+        }
+      ]
+    },
+    featuredImage: {
+      url: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=750&h=1000&fit=crop',
+      altText: 'Acme Drawstring Bag',
+      width: 750,
+      height: 1000
+    },
+    images: {
+      edges: [
+        {
+          node: {
+            url: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=750&h=1000&fit=crop',
+            altText: 'Acme Drawstring Bag',
+            width: 750,
+            height: 1000
+          }
+        }
+      ]
+    },
+    seo: {
+      description: 'A practical drawstring bag for everyday use.',
+      title: 'Acme Drawstring Bag'
+    },
+    tags: ['bag', 'acme'],
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'mock-3',
+    handle: 'acme-cup',
+    availableForSale: true,
+    title: 'Acme Cup',
+    description: 'A durable cup for your daily beverages.',
+    descriptionHtml: '<p>A durable cup for your daily beverages.</p>',
+    options: [
+      {
+        id: 'option-3',
+        name: 'Color',
+        values: ['White', 'Black']
+      }
+    ],
+    priceRange: {
+      maxVariantPrice: {
+        amount: '15.00',
+        currencyCode: 'USD'
+      },
+      minVariantPrice: {
+        amount: '15.00',
+        currencyCode: 'USD'
+      }
+    },
+    variants: {
+      edges: [
+        {
+          node: {
+            id: 'variant-3',
+            title: 'White',
+            availableForSale: true,
+            selectedOptions: [{ name: 'Color', value: 'White' }],
+            price: { amount: '15.00', currencyCode: 'USD' }
+          }
+        }
+      ]
+    },
+    featuredImage: {
+      url: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=750&h=1000&fit=crop',
+      altText: 'Acme Cup',
+      width: 750,
+      height: 1000
+    },
+    images: {
+      edges: [
+        {
+          node: {
+            url: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=750&h=1000&fit=crop',
+            altText: 'Acme Cup',
+            width: 750,
+            height: 1000
+          }
+        }
+      ]
+    },
+    seo: {
+      description: 'A durable cup for your daily beverages.',
+      title: 'Acme Cup'
+    },
+    tags: ['cup', 'acme'],
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'mock-4',
+    handle: 'acme-mug',
+    availableForSale: true,
+    title: 'Acme Mug',
+    description: 'A classic mug for your morning coffee.',
+    descriptionHtml: '<p>A classic mug for your morning coffee.</p>',
+    options: [
+      {
+        id: 'option-4',
+        name: 'Color',
+        values: ['White', 'Black']
+      }
+    ],
+    priceRange: {
+      maxVariantPrice: {
+        amount: '15.00',
+        currencyCode: 'USD'
+      },
+      minVariantPrice: {
+        amount: '15.00',
+        currencyCode: 'USD'
+      }
+    },
+    variants: {
+      edges: [
+        {
+          node: {
+            id: 'variant-4',
+            title: 'White',
+            availableForSale: true,
+            selectedOptions: [{ name: 'Color', value: 'White' }],
+            price: { amount: '15.00', currencyCode: 'USD' }
+          }
+        }
+      ]
+    },
+    featuredImage: {
+      url: 'https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=750&h=1000&fit=crop',
+      altText: 'Acme Mug',
+      width: 750,
+      height: 1000
+    },
+    images: {
+      edges: [
+        {
+          node: {
+            url: 'https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=750&h=1000&fit=crop',
+            altText: 'Acme Mug',
+            width: 750,
+            height: 1000
+          }
+        }
+      ]
+    },
+    seo: {
+      description: 'A classic mug for your morning coffee.',
+      title: 'Acme Mug'
+    },
+    tags: ['mug', 'acme'],
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'mock-5',
+    handle: 'acme-hoodie',
+    availableForSale: true,
+    title: 'Acme Hoodie',
+    description: 'A warm and comfortable hoodie for cold days.',
+    descriptionHtml: '<p>A warm and comfortable hoodie for cold days.</p>',
+    options: [
+      {
+        id: 'option-5',
+        name: 'Size',
+        values: ['S', 'M', 'L', 'XL']
+      }
+    ],
+    priceRange: {
+      maxVariantPrice: {
+        amount: '50.00',
+        currencyCode: 'USD'
+      },
+      minVariantPrice: {
+        amount: '50.00',
+        currencyCode: 'USD'
+      }
+    },
+    variants: {
+      edges: [
+        {
+          node: {
+            id: 'variant-5',
+            title: 'M',
+            availableForSale: true,
+            selectedOptions: [{ name: 'Size', value: 'M' }],
+            price: { amount: '50.00', currencyCode: 'USD' }
+          }
+        }
+      ]
+    },
+    featuredImage: {
+      url: 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=750&h=1000&fit=crop',
+      altText: 'Acme Hoodie',
+      width: 750,
+      height: 1000
+    },
+    images: {
+      edges: [
+        {
+          node: {
+            url: 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=750&h=1000&fit=crop',
+            altText: 'Acme Hoodie',
+            width: 750,
+            height: 1000
+          }
+        }
+      ]
+    },
+    seo: {
+      description: 'A warm and comfortable hoodie for cold days.',
+      title: 'Acme Hoodie'
+    },
+    tags: ['hoodie', 'acme'],
+    updatedAt: new Date().toISOString()
+  }
+];
 
 export async function shopifyFetch<T>({
   headers,
@@ -77,6 +391,15 @@ export async function shopifyFetch<T>({
   query: string;
   variables?: ExtractVariables<T>;
 }): Promise<{ status: number; body: T } | never> {
+  // If Shopify environment variables are not configured, return mock data
+  if (!endpoint || !key) {
+    console.warn('Shopify environment variables not configured. Using mock data.');
+    return {
+      status: 200,
+      body: {} as T
+    };
+  }
+
   try {
     const result = await fetch(endpoint, {
       method: 'POST',
@@ -214,6 +537,21 @@ const reshapeProducts = (products: ShopifyProduct[]) => {
 };
 
 export async function createCart(): Promise<Cart> {
+  // If Shopify is not configured, return mock cart
+  if (!endpoint || !key) {
+    return {
+      id: 'mock-cart',
+      checkoutUrl: '#',
+      cost: {
+        subtotalAmount: { amount: '0.00', currencyCode: 'USD' },
+        totalAmount: { amount: '0.00', currencyCode: 'USD' },
+        totalTaxAmount: { amount: '0.00', currencyCode: 'USD' }
+      },
+      lines: [],
+      totalQuantity: 0
+    };
+  }
+
   const res = await shopifyFetch<ShopifyCreateCartOperation>({
     query: createCartMutation
   });
@@ -264,6 +602,11 @@ export async function updateCart(
 }
 
 export async function getCart(): Promise<Cart | undefined> {
+  // If Shopify is not configured, return undefined for cart
+  if (!endpoint || !key) {
+    return undefined;
+  }
+
   const cartId = (await cookies()).get('cartId')?.value;
 
   if (!cartId) {
@@ -286,9 +629,45 @@ export async function getCart(): Promise<Cart | undefined> {
 export async function getCollection(
   handle: string
 ): Promise<Collection | undefined> {
-  'use cache';
-  cacheTag(TAGS.collections);
-  cacheLife('days');
+  // If Shopify is not configured, return mock collection
+  if (!endpoint || !key) {
+    const mockCollections = [
+      {
+        handle: '',
+        title: 'All',
+        description: 'All products',
+        seo: {
+          title: 'All',
+          description: 'All products'
+        },
+        path: '/search',
+        updatedAt: new Date().toISOString()
+      },
+      {
+        handle: 'shirts',
+        title: 'Shirts',
+        description: 'Comfortable shirts for everyday wear',
+        seo: {
+          title: 'Shirts',
+          description: 'Comfortable shirts for everyday wear'
+        },
+        path: '/search/shirts',
+        updatedAt: new Date().toISOString()
+      },
+      {
+        handle: 'stickers',
+        title: 'Stickers',
+        description: 'Fun stickers for your belongings',
+        seo: {
+          title: 'Stickers',
+          description: 'Fun stickers for your belongings'
+        },
+        path: '/search/stickers',
+        updatedAt: new Date().toISOString()
+      }
+    ];
+    return mockCollections.find(c => c.handle === handle);
+  }
 
   const res = await shopifyFetch<ShopifyCollectionOperation>({
     query: getCollectionQuery,
@@ -309,9 +688,10 @@ export async function getCollectionProducts({
   reverse?: boolean;
   sortKey?: string;
 }): Promise<Product[]> {
-  'use cache';
-  cacheTag(TAGS.collections, TAGS.products);
-  cacheLife('days');
+  // If Shopify is not configured, return mock products for collections
+  if (!endpoint || !key) {
+    return reshapeProducts(mockProducts);
+  }
 
   const res = await shopifyFetch<ShopifyCollectionProductsOperation>({
     query: getCollectionProductsQuery,
@@ -333,9 +713,44 @@ export async function getCollectionProducts({
 }
 
 export async function getCollections(): Promise<Collection[]> {
-  'use cache';
-  cacheTag(TAGS.collections);
-  cacheLife('days');
+  // If Shopify is not configured, return mock collections
+  if (!endpoint || !key) {
+    return [
+      {
+        handle: '',
+        title: 'All',
+        description: 'All products',
+        seo: {
+          title: 'All',
+          description: 'All products'
+        },
+        path: '/search',
+        updatedAt: new Date().toISOString()
+      },
+      {
+        handle: 'shirts',
+        title: 'Shirts',
+        description: 'Comfortable shirts for everyday wear',
+        seo: {
+          title: 'Shirts',
+          description: 'Comfortable shirts for everyday wear'
+        },
+        path: '/search/shirts',
+        updatedAt: new Date().toISOString()
+      },
+      {
+        handle: 'stickers',
+        title: 'Stickers',
+        description: 'Fun stickers for your belongings',
+        seo: {
+          title: 'Stickers',
+          description: 'Fun stickers for your belongings'
+        },
+        path: '/search/stickers',
+        updatedAt: new Date().toISOString()
+      }
+    ];
+  }
 
   const res = await shopifyFetch<ShopifyCollectionsOperation>({
     query: getCollectionsQuery
@@ -367,6 +782,55 @@ export async function getMenu(handle: string): Promise<Menu[]> {
   'use cache';
   cacheTag(TAGS.collections);
   cacheLife('days');
+
+  // If Shopify is not configured, return mock menu items
+  if (!endpoint || !key) {
+    if (handle === 'next-js-frontend-header-menu') {
+      return [
+        {
+          title: 'All',
+          path: '/search'
+        },
+        {
+          title: 'Shirts',
+          path: '/search/shirts'
+        },
+        {
+          title: 'Stickers',
+          path: '/search/stickers'
+        }
+      ];
+    }
+    if (handle === 'next-js-frontend-footer-menu') {
+      return [
+        {
+          title: 'Home',
+          path: '/'
+        },
+        {
+          title: 'About',
+          path: '/about'
+        },
+        {
+          title: 'Terms & Conditions',
+          path: '/terms'
+        },
+        {
+          title: 'Shipping & Return Policy',
+          path: '/shipping'
+        },
+        {
+          title: 'Privacy Policy',
+          path: '/privacy'
+        },
+        {
+          title: 'FAQ',
+          path: '/faq'
+        }
+      ];
+    }
+    return [];
+  }
 
   const res = await shopifyFetch<ShopifyMenuOperation>({
     query: getMenuQuery,
@@ -404,9 +868,11 @@ export async function getPages(): Promise<Page[]> {
 }
 
 export async function getProduct(handle: string): Promise<Product | undefined> {
-  'use cache';
-  cacheTag(TAGS.products);
-  cacheLife('days');
+  // If Shopify is not configured, return mock product
+  if (!endpoint || !key) {
+    const mockProduct = mockProducts.find(p => p.handle === handle);
+    return mockProduct ? reshapeProduct(mockProduct, false) : undefined;
+  }
 
   const res = await shopifyFetch<ShopifyProductOperation>({
     query: getProductQuery,
@@ -424,6 +890,11 @@ export async function getProductRecommendations(
   'use cache';
   cacheTag(TAGS.products);
   cacheLife('days');
+
+  // If Shopify is not configured, return empty array
+  if (!endpoint || !key) {
+    return [];
+  }
 
   const res = await shopifyFetch<ShopifyProductRecommendationsOperation>({
     query: getProductRecommendationsQuery,
@@ -444,9 +915,10 @@ export async function getProducts({
   reverse?: boolean;
   sortKey?: string;
 }): Promise<Product[]> {
-  'use cache';
-  cacheTag(TAGS.products);
-  cacheLife('days');
+  // If Shopify is not configured, return mock products
+  if (!endpoint || !key) {
+    return reshapeProducts(mockProducts);
+  }
 
   const res = await shopifyFetch<ShopifyProductsOperation>({
     query: getProductsQuery,
