@@ -7,3 +7,8 @@ export default async function Image({ params }: { params: { page: string } }) {
 
   return await OpengraphImage({ title });
 }
+
+// Purpose:
+// Generates Open Graph images for social media sharing
+// Uses the page's SEO title or falls back to the page title
+// Leverages a reusable OpengraphImage component

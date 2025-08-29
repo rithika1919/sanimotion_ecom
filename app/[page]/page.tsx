@@ -18,3 +18,9 @@ export default async function Page({ params }: { params: { page: string } }) {
     </div>
   );
 }
+
+// Purpose:
+// Fetches page data from Shopify using the getPage function
+// Displays the page title and body content
+// Returns a 404 if the page doesn't exist
+// Uses Tailwind CSS for styling with responsive design

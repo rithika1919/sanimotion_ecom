@@ -10,3 +10,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     </>
   );
 }
+
+// Purpose:
+// Provides consistent layout for all pages
+// Centers content with responsive margins
+// Includes the footer component
+// Applies consistent spacing and width constraints
